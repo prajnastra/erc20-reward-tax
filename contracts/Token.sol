@@ -8,7 +8,7 @@ import './interfaces/IDEXFactory.sol';
 import './interfaces/IDEXRouter.sol';
 import './interfaces/InterfaceLP.sol';
 
-contract EvoToken is ERC20, Ownable {
+contract Token is ERC20, Ownable {
   using SafeMath for uint256;
   using SafeMathInt for int256;
 
@@ -83,7 +83,7 @@ contract EvoToken is ERC20, Ownable {
 
   constructor() ERC20('Test', 'TST', uint8(DECIMALS)) {
     // DEX router Mainnet
-    router = IDEXRouter(0x21086f765FcaFE6F78a76b43B207ADC7e9b529C4);
+    router = IDEXRouter(0xdBD619b395d04e7a2E4cE18d78A006A888Ea86EB);
     pair = IDEXFactory(router.factory()).createPair(
       address(this),
       router.WBRISE()
@@ -331,7 +331,7 @@ contract EvoToken is ERC20, Ownable {
       .mul(dynamicLiquidityFee.mul(2))
       .div(realTotalFee);
     uint256 amountToReserve = contractTokenBalance
-      .mul(buyFeeReserve.mul(2).add(sellFeeReserveAdded))
+      .mul(buyFeeReserve.add(sellFeeReserveAdded))
       .div(realTotalFee);
     uint256 amountToTreasury = contractTokenBalance.sub(amountToLiquify).sub(
       amountToReserve
@@ -455,12 +455,27 @@ contract EvoToken is ERC20, Ownable {
     require(!inSwap, 'Try again');
     require(nextRebase <= block.timestamp, 'Not in time');
 
-    uint256 circulatingSupply = getCirculatingSupply();
-    int256 supplyDelta = int256(
-      circulatingSupply.mul(rewardYield).div(rewardYieldDenominator)
+    uint256 realTotalFee = totalBuyFee.add(totalSellFee);
+
+    uint256 contractTokenBalance = _gonBalances[address(this)].div(
+      _gonsPerFragment
     );
 
+    uint256 amountToReserve = contractTokenBalance
+      .mul(buyFeeReserve.add(sellFeeReserveAdded))
+      .div(realTotalFee);
+
+
+    int256 supplyDelta = int256(amountToReserve);
+
     coreRebase(supplyDelta);
+
+    _transferFrom(
+      address(this),
+      address(0x000000000000000000000000000000000000dEaD),
+      amountToReserve
+    );
+
     manualSync();
   }
 
