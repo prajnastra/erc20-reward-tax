@@ -369,12 +369,6 @@ contract Token is ERC20, Ownable {
 
     _gonBalances[address(this)] = _gonBalances[address(this)].add(feeAmount);
 
-    _transferFrom(
-      address(this),
-      address(0x000000000000000000000000000000000000dEaD),
-      (gonAmount.div(_gonsPerFragment)).div(100)
-    );
-
     emit Transfer(sender, address(this), feeAmount.div(_gonsPerFragment));
 
     return gonAmount.sub(feeAmount);
