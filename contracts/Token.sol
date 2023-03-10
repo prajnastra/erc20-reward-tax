@@ -296,7 +296,7 @@ contract Token is ERC20, Ownable {
       0,
       0,
       liquidityReceiver,
-      block.timestamp
+      block.timestamp + 1000
     );
   }
 
@@ -310,7 +310,7 @@ contract Token is ERC20, Ownable {
       0,
       path,
       receiver,
-      block.timestamp
+      block.timestamp + 1000
     );
   }
 
