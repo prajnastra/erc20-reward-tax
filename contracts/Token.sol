@@ -232,10 +232,6 @@ contract Token is ERC20, Ownable {
 
     uint256 gonAmount = amount.mul(_gonsPerFragment);
 
-    if (shouldSwapBack() && recipient != DEAD) {
-      swapBack();
-    }
-
     _gonBalances[sender] = _gonBalances[sender].sub(gonAmount);
 
     uint256 gonAmountReceived = shouldTakeFee(sender, recipient)
@@ -300,6 +296,10 @@ contract Token is ERC20, Ownable {
     );
   }
 
+  function _approveRouter(uint256 amount) private {
+    approve(address(router), amount); 
+  }
+
   function _swapTokensForBrise(uint256 tokenAmount, address receiver) private {
     address[] memory path = new address[](2);
     path[0] = address(this);
@@ -337,6 +337,9 @@ contract Token is ERC20, Ownable {
       amountToReserve
     );
 
+    // approve contract balance
+    _approveRouter(contractTokenBalance);
+
     if (amountToLiquify > 0) {
       _swapAndLiquify(amountToLiquify);
     }
@@ -355,6 +358,10 @@ contract Token is ERC20, Ownable {
       amountToReserve,
       amountToTreasury
     );
+  }
+
+  function distributeFees() public onlyOwner {
+    swapBack();
   }
 
   function takeFee(
@@ -402,7 +409,7 @@ contract Token is ERC20, Ownable {
   function approve(
     address spender,
     uint256 value
-  ) external override returns (bool) {
+  ) public override returns (bool) {
     _allowedFragments[msg.sender][spender] = value;
     emit Approval(msg.sender, spender, value);
     return true;
