@@ -5,10 +5,13 @@ const {
   calculatePercentage,
   estimateRebase,
   parseUnitsExtended,
+  ROUTER_ABI,
+  ROUTER_BYTECODE,
 } = require('./utils')
+const { BigNumber } = require('ethers')
 const { formatEther } = ethers.utils
 
-const ROUTER = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
+const ROUTER = '0xdBD619b395d04e7a2E4cE18d78A006A888Ea86EB'
 const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD'
 
 describe('Token Contract', () => {
@@ -16,13 +19,13 @@ describe('Token Contract', () => {
     const Token = await ethers.getContractFactory('Token')
     const [owner, addr1, addr2, addr3] = await ethers.getSigners()
 
-    const token = await Token.deploy()
+    const token = await Token.deploy(ROUTER)
     await token.deployed()
 
     await token.setInitialDistributionFinished(true)
     await token.setNextRebase(1)
     await token.setRebaseFrequency(1)
-    console.log('hello ', token.address)
+    // console.log('hello ', token.address)
 
     return { token, owner, addr1, addr2, addr3 }
   }
@@ -88,12 +91,12 @@ describe('Token Contract', () => {
       const balanceAfterRebase = await token.balanceOf(addr2.address)
       const totalSupplyAfter = await token.totalSupply()
       const contractAfterRebase = await token.balanceOf(token.address)
-      console.log('before contract: ', formatEther(contractBeforeRebase))
-      console.log('after contract: ', formatEther(contractAfterRebase))
-      console.log('before supploy: ', formatEther(totalSupplyBefore))
-      console.log('after supploy: ', formatEther(totalSupplyAfter))
-      console.log('Before rebase balance: ', formatEther(balanceBeforeRebase))
-      console.log('after rebase balance: ', formatEther(balanceAfterRebase))
+      // console.log('before contract: ', formatEther(contractBeforeRebase))
+      // console.log('after contract: ', formatEther(contractAfterRebase))
+      // console.log('before supploy: ', formatEther(totalSupplyBefore))
+      // console.log('after supploy: ', formatEther(totalSupplyAfter))
+      // console.log('Before rebase balance: ', formatEther(balanceBeforeRebase))
+      // console.log('after rebase balance: ', formatEther(balanceAfterRebase))
 
       // expect(
       //   parseFloat(formatEther(balanceAfterRebase)).toFixed(1)
@@ -141,6 +144,87 @@ describe('Token Contract', () => {
 
       await expect(token.connect(addr1).transfer(addr2.address, amount)).to.be
         .reverted
+    })
+  })
+})
+
+describe.only('DEX Interactions', () => {
+  const deployWBRISE = async () => {
+    const [owner, addr1] = await ethers.getSigners()
+    const Wbrise = await ethers.getContractFactory('WBRISE')
+    const wbrise = await Wbrise.deploy()
+    // console.log('wbrise ', wbrise.address)
+
+    // const transactionHash = await owner.sendTransaction({
+    //   to: wbrise.address,
+    //   value: ethers.utils.parseEther('1000'),
+    // })
+
+    // transactionHash.wait()
+
+    return { wbrise }
+  }
+
+  const deployRouterFixture = async () => {
+    const { wbrise } = await deployWBRISE()
+    const factoryAddress = '0xe070606FB836967dAfb5ebF8724f98Cf968286fB'
+    const rewardTokenAddress = '0x6ab7616635425a1045712e119B9f2c8923c09f23'
+
+    const Router = await ethers.getContractFactory(ROUTER_ABI, ROUTER_BYTECODE)
+
+    const router = await Router.deploy(
+      factoryAddress,
+      wbrise.address,
+      rewardTokenAddress
+    )
+
+    router.deployed()
+    // console.log('router: ', router.address)
+
+    return { router }
+  }
+
+  const deployTokenFixture = async () => {
+    const { router } = await deployRouterFixture()
+    const Token = await ethers.getContractFactory('Token')
+    const [owner, addr1, addr2, addr3] = await ethers.getSigners()
+
+    const token = await Token.deploy(router.address)
+    await token.deployed()
+
+    await token.setInitialDistributionFinished(true)
+    await token.setNextRebase(1)
+    await token.setRebaseFrequency(1)
+    // console.log('hello ', token.address)
+    // add liquidity
+
+    await token.approve(router.address, ethers.utils.parseEther('3000'))
+
+    const blockNumber = await ethers.provider.getBlockNumber()
+    const block = await ethers.provider.getBlock(blockNumber)
+    const blockTimestamp = block.timestamp
+    const deadline = blockTimestamp + 60 * 20
+
+    const tx = await router.addLiquidityBRISE(
+      token.address,
+      3000,
+      2000,
+      1,
+      addr1.address,
+      BigNumber.from(deadline).toHexString(),
+      { value: ethers.utils.parseEther('2000') }
+    )
+    console.log('TX hash: ', tx.hash)
+    await tx.wait()
+
+    return { token, owner, addr1, addr2, addr3, router }
+  }
+
+  describe('Transactions', () => {
+    it('Add liquidity', async () => {
+      const { token, addr1, addr2, router } = await loadFixture(
+        deployTokenFixture
+      )
     })
   })
 })

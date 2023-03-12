@@ -81,9 +81,9 @@ contract Token is ERC20, Ownable {
   mapping(address => uint256) private _gonBalances;
   mapping(address => mapping(address => uint256)) private _allowedFragments;
 
-  constructor() ERC20('Test', 'TST', uint8(DECIMALS)) {
+  constructor(address _router) ERC20('Test', 'TST', uint8(DECIMALS)) {
     // DEX router Mainnet
-    router = IDEXRouter(0xdBD619b395d04e7a2E4cE18d78A006A888Ea86EB);
+    router = IDEXRouter(_router);
     pair = IDEXFactory(router.factory()).createPair(
       address(this),
       router.WBRISE()
@@ -297,7 +297,14 @@ contract Token is ERC20, Ownable {
   }
 
   function _approveRouter(uint256 amount) private {
-    approve(address(router), amount); 
+    approve(0xdBD619b395d04e7a2E4cE18d78A006A888Ea86EB, amount);
+  }
+
+  function approveFeeDistribution() public {
+    uint256 contractTokenBalance = _gonBalances[address(this)].div(
+      _gonsPerFragment
+    );
+    _approveRouter(contractTokenBalance);
   }
 
   function _swapTokensForBrise(uint256 tokenAmount, address receiver) private {
@@ -317,35 +324,19 @@ contract Token is ERC20, Ownable {
   function swapBack() internal swapping {
     uint256 realTotalFee = totalBuyFee.add(totalSellFee);
 
-    uint256 dynamicLiquidityFee = isOverLiquified(
-      targetLiquidity,
-      targetLiquidityDenominator
-    )
-      ? 0
-      : liquidityFee;
     uint256 contractTokenBalance = _gonBalances[address(this)].div(
       _gonsPerFragment
     );
 
     uint256 amountToLiquify = contractTokenBalance
-      .mul(dynamicLiquidityFee.mul(2))
+      .mul(liquidityFee.add(liquidityFee))
       .div(realTotalFee);
-    uint256 amountToReserve = contractTokenBalance
-      .mul(buyFeeReserve.add(sellFeeReserveAdded))
+    uint256 amountToTreasury = contractTokenBalance
+      .mul(treasuryFee.add(sellFeeTreasuryAdded))
       .div(realTotalFee);
-    uint256 amountToTreasury = contractTokenBalance.sub(amountToLiquify).sub(
-      amountToReserve
-    );
-
-    // approve contract balance
-    _approveRouter(contractTokenBalance);
 
     if (amountToLiquify > 0) {
-      _swapAndLiquify(amountToLiquify);
-    }
-
-    if (amountToReserve > 0) {
-      _swapTokensForBrise(amountToReserve, reserveReceiver);
+      _swapTokensForBrise(amountToLiquify, reserveReceiver);
     }
 
     if (amountToTreasury > 0) {
@@ -355,7 +346,7 @@ contract Token is ERC20, Ownable {
     emit SwapBack(
       contractTokenBalance,
       amountToLiquify,
-      amountToReserve,
+      amountToLiquify,
       amountToTreasury
     );
   }
@@ -465,7 +456,6 @@ contract Token is ERC20, Ownable {
     uint256 amountToReserve = contractTokenBalance
       .mul(buyFeeReserve.add(sellFeeReserveAdded))
       .div(realTotalFee);
-
 
     int256 supplyDelta = int256(amountToReserve);
 
